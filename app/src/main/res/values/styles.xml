@@ -1,6 +1,3 @@
 <resources>
-  <style name="Theme.MathBubble" parent="android:style/Theme.Material.Light.NoActionBar">
-    <item name="android:fontFamily">sans</item>
-    <item name="android:colorAccent">#1565C0</item>
-  </style>
+    <style name="Theme.AppCompat.DayNight.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar"/>
 </resources>
