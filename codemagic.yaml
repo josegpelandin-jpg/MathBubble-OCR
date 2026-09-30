@@ -1,6 +1,6 @@
 workflows:
   android-debug:
-    name: MathBubble OCR Android Debug
+    name: MathBubble OCR V3 Debug APK
     max_build_duration: 30
     environment:
       java: 17
@@ -11,6 +11,8 @@ workflows:
           ls -la
           test -f settings.gradle
           test -f app/build.gradle
+          test -f app/src/main/AndroidManifest.xml
+          test -f app/src/main/java/com/mahetre/mathbubble/CaptureService.java
       - name: Build APK
         script: |
           gradle :app:assembleDebug --stacktrace

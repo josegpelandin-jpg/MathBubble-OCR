@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">MathBubble OCR</string>
-    <string name="accessibility_desc">Detecta texto matemático visible y permite seleccionar respuestas accesibles.</string>
+  <string name="app_name">MathBubble OCR</string>
+  <string name="accessibility_desc">Permite tocar la respuesta matemática detectada cuando el modo automático está activado.</string>
 </resources>
