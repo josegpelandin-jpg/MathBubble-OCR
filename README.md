@@ -31,10 +31,10 @@ genera un APK debug en `app/build/outputs/apk/debug/`.
 - Usa la automatización únicamente donde esté permitida.
 
 
-## V4 Math Auto
+## V5 Math Auto
 - Operaciones combinadas: +, -, x, /, potencias, parentesis, decimales y negativos.
 - Soporte adicional para raiz cuadrada, porcentajes, superindices 2/3 y fracciones Unicode comunes.
 - Busca una respuesta numerica coincidente fuera de la linea de la operacion y puede tocarla en modo AUTO.
 - Toque corto en la burbuja: AUTO/OFF.
-- Pulsacion larga (>=0.7 s): pausa la automatizacion durante 2 minutos.
-- Si OCR encuentra una linea etiquetada Puntos/Points/PTS/Score, muestra una vista previa x2 en la burbuja. No modifica el puntaje de otra aplicacion.
+- La pausa por pulsacion larga fue eliminada. Un toque activa o desactiva AUTO.
+- Si OCR encuentra una linea etiquetada Puntos/Points/PTS/Score, muestra una vista previa x100 en la burbuja. No modifica el puntaje de otra aplicacion.

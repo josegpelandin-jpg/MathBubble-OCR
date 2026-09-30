@@ -25,7 +25,6 @@ public class CaptureService extends Service {
     volatile boolean busy=false, auto=false;
     volatile String last="?";
     volatile String pointsDouble="";
-    volatile long pausedUntil=0;
     long lastClick=0;
     final Handler uiHandler=new Handler(Looper.getMainLooper());
     int width,height,density;
@@ -115,7 +114,7 @@ public class CaptureService extends Service {
             if(dist<best){ best=dist; match=t; }
         }
         long now=System.currentTimeMillis();
-        if(auto && now>=pausedUntil && match!=null && now-lastClick>350){
+        if(auto && match!=null && now-lastClick>350){
             lastClick=now;
             MathAccessibilityService.clickAt(match.r.centerX(),match.r.centerY());
         }
@@ -150,7 +149,7 @@ public class CaptureService extends Service {
             Matcher m=labeled.matcher(l.getText());
             if(m.matches()){
                 String n=m.group(1)!=null?m.group(1):m.group(2);
-                try { pointsDouble="Pts×2: "+format(Double.parseDouble(n.replace(",","."))*2.0); } catch(Exception ignored){}
+                try { pointsDouble="Pts×100: "+format(Double.parseDouble(n.replace(",","."))*100.0); } catch(Exception ignored){}
                 return;
             }
         }
@@ -179,11 +178,11 @@ public class CaptureService extends Service {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT);
         p.gravity=Gravity.TOP|Gravity.START; p.x=20; p.y=300;
 
-        final int[] sx={0},sy={0},ix={0},iy={0}; final boolean[] moved={false}; final long[] downAt={0};
+        final int[] sx={0},sy={0},ix={0},iy={0}; final boolean[] moved={false};
         bubble.setOnTouchListener((v,e)->{
             if(e.getAction()==MotionEvent.ACTION_DOWN){
                 sx[0]=(int)e.getRawX(); sy[0]=(int)e.getRawY();
-                ix[0]=p.x; iy[0]=p.y; moved[0]=false; downAt[0]=System.currentTimeMillis(); return true;
+                ix[0]=p.x; iy[0]=p.y; moved[0]=false; return true;
             }
             if(e.getAction()==MotionEvent.ACTION_MOVE){
                 if(Math.abs(e.getRawX()-sx[0])>10 || Math.abs(e.getRawY()-sy[0])>10) moved[0]=true;
@@ -191,11 +190,7 @@ public class CaptureService extends Service {
                 wm.updateViewLayout(bubble,p); return true;
             }
             if(e.getAction()==MotionEvent.ACTION_UP){
-                if(!moved[0]) {
-                    long held=System.currentTimeMillis()-downAt[0];
-                    if(held>=700){ pausedUntil=System.currentTimeMillis()+120000; refreshBubble(); uiHandler.removeCallbacks(pauseTicker); uiHandler.post(pauseTicker); }
-                    else { auto=!auto; refreshBubble(); }
-                }
+                if(!moved[0]) { auto=!auto; refreshBubble(); }
                 return true;
             }
             return true;
@@ -206,22 +201,11 @@ public class CaptureService extends Service {
     void refreshBubble(){
         if(bubble==null) return;
         uiHandler.post(() -> {
-            long left=Math.max(0,pausedUntil-System.currentTimeMillis());
-            String state;
-            if(left>0) state="PAUSA "+((left+999)/1000)+"s";
-            else state=auto?"AUTO":"OFF";
+            String state=auto?"AUTO":"OFF";
             String extra=pointsDouble.isEmpty()?"":"\n"+pointsDouble;
             bubble.setText(last+"\n"+state+extra);
         });
     }
-
-    final Runnable pauseTicker=new Runnable(){
-        @Override public void run(){
-            if(pausedUntil>System.currentTimeMillis()){
-                refreshBubble(); uiHandler.postDelayed(this,1000);
-            } else refreshBubble();
-        }
-    };
 
     void createChannel(){
         if(Build.VERSION.SDK_INT>=26){
