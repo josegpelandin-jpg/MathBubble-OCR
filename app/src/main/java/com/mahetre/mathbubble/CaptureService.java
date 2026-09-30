@@ -24,7 +24,10 @@ public class CaptureService extends Service {
     TextRecognizer recognizer;
     volatile boolean busy=false, auto=false;
     volatile String last="?";
+    volatile String pointsDouble="";
+    volatile long pausedUntil=0;
     long lastClick=0;
+    final Handler uiHandler=new Handler(Looper.getMainLooper());
     int width,height,density;
 
     @Override public int onStartCommand(Intent intent,int flags,int id){
@@ -91,32 +94,66 @@ public class CaptureService extends Service {
                 for(Text.Element e:line.getElements())
                     if(e.getBoundingBox()!=null) tokens.add(new Token(e.getText(),e.getBoundingBox()));
 
-        String expr=findExpression(text);
-        if(expr==null) return;
+        updatePointsPreview(text);
+
+        ExpressionHit hit=findExpressionHit(text);
+        if(hit==null) { refreshBubble(); return; }
         double ans;
-        try { ans=new MathParser(expr).parse(); } catch(Exception ex){ return; }
+        try { ans=new MathParser(hit.expression).parse(); } catch(Exception ex){ return; }
         last=format(ans); refreshBubble();
 
         Token match=null;
+        double best=Double.MAX_VALUE;
         for(Token t:tokens){
             Double v=number(t.s);
-            if(v!=null && Math.abs(v-ans)<1e-6){ match=t; break; }
+            if(v==null || Math.abs(v-ans)>1e-6) continue;
+            // Evita tocar un número que forme parte de la propia operación.
+            if(hit.bounds!=null && Rect.intersects(hit.bounds,t.r)) continue;
+            double dx=hit.bounds==null?0:t.r.centerX()-hit.bounds.centerX();
+            double dy=hit.bounds==null?0:t.r.centerY()-hit.bounds.centerY();
+            double dist=dx*dx+dy*dy;
+            if(dist<best){ best=dist; match=t; }
         }
-        if(auto && match!=null && System.currentTimeMillis()-lastClick>250){
-            lastClick=System.currentTimeMillis();
+        long now=System.currentTimeMillis();
+        if(auto && now>=pausedUntil && match!=null && now-lastClick>350){
+            lastClick=now;
             MathAccessibilityService.clickAt(match.r.centerX(),match.r.centerY());
         }
     }
 
-    String findExpression(com.google.mlkit.vision.text.Text text){
-        Pattern op=Pattern.compile(".*\\d\\s*[+\\-×÷*/^]\\s*[-+]?\\d.*");
+    ExpressionHit findExpressionHit(com.google.mlkit.vision.text.Text text){
+        Pattern op=Pattern.compile(".*(?:\\d|\\))\\s*(?:[+\\-×÷*/^]|²|³|%).*");
+        Pattern sqrt=Pattern.compile(".*(?:√|sqrt).*\\d.*",Pattern.CASE_INSENSITIVE);
         for(Text.TextBlock b:text.getTextBlocks()){
             for(Text.Line l:b.getLines()){
-                String s=l.getText().trim();
-                if(s.length()<=50 && op.matcher(s).matches()) return s;
+                String raw=l.getText().trim();
+                if(raw.length()>80) continue;
+                if(op.matcher(raw).matches() || sqrt.matcher(raw).matches()){
+                    String cleaned=extractMath(raw);
+                    if(cleaned!=null) return new ExpressionHit(cleaned,l.getBoundingBox());
+                }
             }
         }
         return null;
+    }
+
+    String extractMath(String raw){
+        String s=raw.replaceAll("(?i)(resultado|result|resuelve|solve|cuanto es|cuánto es)[: ]*","").trim();
+        int eq=s.indexOf('='); if(eq>=0) s=s.substring(0,eq);
+        s=s.replace("?","").replace("¿","").trim();
+        return s.matches(".*\\d.*") ? s : null;
+    }
+
+    void updatePointsPreview(com.google.mlkit.vision.text.Text text){
+        Pattern labeled=Pattern.compile("(?i).*(?:puntos|points|pts|score)\\D{0,12}(-?\\d+(?:[.,]\\d+)?).*|.*(-?\\d+(?:[.,]\\d+)?)\\D{0,12}(?:puntos|points|pts|score).*");
+        for(Text.TextBlock b:text.getTextBlocks()) for(Text.Line l:b.getLines()){
+            Matcher m=labeled.matcher(l.getText());
+            if(m.matches()){
+                String n=m.group(1)!=null?m.group(1):m.group(2);
+                try { pointsDouble="Pts×2: "+format(Double.parseDouble(n.replace(",","."))*2.0); } catch(Exception ignored){}
+                return;
+            }
+        }
     }
 
     Double number(String s){
@@ -142,11 +179,11 @@ public class CaptureService extends Service {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT);
         p.gravity=Gravity.TOP|Gravity.START; p.x=20; p.y=300;
 
-        final int[] sx={0},sy={0},ix={0},iy={0}; final boolean[] moved={false};
+        final int[] sx={0},sy={0},ix={0},iy={0}; final boolean[] moved={false}; final long[] downAt={0};
         bubble.setOnTouchListener((v,e)->{
             if(e.getAction()==MotionEvent.ACTION_DOWN){
                 sx[0]=(int)e.getRawX(); sy[0]=(int)e.getRawY();
-                ix[0]=p.x; iy[0]=p.y; moved[0]=false; return true;
+                ix[0]=p.x; iy[0]=p.y; moved[0]=false; downAt[0]=System.currentTimeMillis(); return true;
             }
             if(e.getAction()==MotionEvent.ACTION_MOVE){
                 if(Math.abs(e.getRawX()-sx[0])>10 || Math.abs(e.getRawY()-sy[0])>10) moved[0]=true;
@@ -154,7 +191,11 @@ public class CaptureService extends Service {
                 wm.updateViewLayout(bubble,p); return true;
             }
             if(e.getAction()==MotionEvent.ACTION_UP){
-                if(!moved[0]) { auto=!auto; refreshBubble(); }
+                if(!moved[0]) {
+                    long held=System.currentTimeMillis()-downAt[0];
+                    if(held>=700){ pausedUntil=System.currentTimeMillis()+120000; refreshBubble(); uiHandler.removeCallbacks(pauseTicker); uiHandler.post(pauseTicker); }
+                    else { auto=!auto; refreshBubble(); }
+                }
                 return true;
             }
             return true;
@@ -163,9 +204,24 @@ public class CaptureService extends Service {
     }
 
     void refreshBubble(){
-        if(bubble!=null) new Handler(Looper.getMainLooper()).post(
-            () -> bubble.setText(last+"\n"+(auto?"AUTO":"OFF")));
+        if(bubble==null) return;
+        uiHandler.post(() -> {
+            long left=Math.max(0,pausedUntil-System.currentTimeMillis());
+            String state;
+            if(left>0) state="PAUSA "+((left+999)/1000)+"s";
+            else state=auto?"AUTO":"OFF";
+            String extra=pointsDouble.isEmpty()?"":"\n"+pointsDouble;
+            bubble.setText(last+"\n"+state+extra);
+        });
     }
+
+    final Runnable pauseTicker=new Runnable(){
+        @Override public void run(){
+            if(pausedUntil>System.currentTimeMillis()){
+                refreshBubble(); uiHandler.postDelayed(this,1000);
+            } else refreshBubble();
+        }
+    };
 
     void createChannel(){
         if(Build.VERSION.SDK_INT>=26){
@@ -184,6 +240,11 @@ public class CaptureService extends Service {
         super.onDestroy();
     }
     @Override public android.os.IBinder onBind(Intent i){return null;}
+
+    static class ExpressionHit {
+        String expression; Rect bounds;
+        ExpressionHit(String expression,Rect bounds){this.expression=expression;this.bounds=bounds;}
+    }
 
     static class Token {
         String s; Rect r;

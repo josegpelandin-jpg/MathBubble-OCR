@@ -29,3 +29,12 @@ genera un APK debug en `app/build/outputs/apk/debug/`.
 - La selección automática usa coordenadas de pantalla; interfaces animadas o que cambien muy rápido pueden requerir ajuste.
 - El reconocimiento se limita a expresiones aritméticas. No pretende resolver matemática simbólica arbitraria.
 - Usa la automatización únicamente donde esté permitida.
+
+
+## V4 Math Auto
+- Operaciones combinadas: +, -, x, /, potencias, parentesis, decimales y negativos.
+- Soporte adicional para raiz cuadrada, porcentajes, superindices 2/3 y fracciones Unicode comunes.
+- Busca una respuesta numerica coincidente fuera de la linea de la operacion y puede tocarla en modo AUTO.
+- Toque corto en la burbuja: AUTO/OFF.
+- Pulsacion larga (>=0.7 s): pausa la automatizacion durante 2 minutos.
+- Si OCR encuentra una linea etiquetada Puntos/Points/PTS/Score, muestra una vista previa x2 en la burbuja. No modifica el puntaje de otra aplicacion.
